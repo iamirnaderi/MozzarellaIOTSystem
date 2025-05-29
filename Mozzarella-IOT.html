@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Mozzarella Production Dashboard - Detailed Equipment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* Base styles for the body and overall container */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a; /* Dark background for a dashboard feel */
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .dashboard-container {
+            width: 100%;
+            max-width: 1600px; /* Wider layout for desktop */
+            background-color: #212121; /* Slightly lighter dark for content area */
+            border-radius: 1rem; /* Rounded corners for the main container */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); /* Subtle shadow for depth */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Ensures content respects border-radius */
+        }
+        /* Header styling */
+        header {
+            background-color: #2c2c2c; /* Darker header background */
+            border-bottom: 1px solid #3a3a3a; /* Separator line */
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #e0e0e0; /* Light text color */
+        }
+        /* Equipment card styling */
+        .module-card {
+            background-color: #2c2c2c;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 220px; /* Consistent height for grid alignment */
+            border: 1px solid transparent; /* Default transparent border */
+            transition: all 0.2s ease-in-out; /* Smooth transitions for hover effects */
+            cursor: pointer; /* Indicates card is clickable */
+        }
+        .module-card:hover {
+            border-color: #4a4a4a; /* Subtle border on hover */
+            transform: translateY(-2px); /* Slight lift effect */
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); /* Enhanced shadow on hover */
+        }
+        /* Status pill styling */
+        .status-pill {
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px; /* Fully rounded pill shape */
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            color: #ffffff;
+        }
+        /* Color definitions for different status types */
+        .status-safe { background-color: #38a169; } /* Green */
+        .status-warning { background-color: #f6ad55; } /* Orange */
+        .status-fault { background-color: #e53e3e; } /* Red */
+        .status-info { background-color: #4299e1; } /* Blue */
+        .status-optimal { background-color: #2b6cb0; } /* Darker blue */
+        .status-good { background-color: #48bb78; } /* Lighter green */
+        .status-moderate { background-color: #ecc94b; } /* Yellow */
+        .status-critical { background-color: #c53030; } /* Darker red */
+
+        /* Section title styling */
+        .section-title {
+            color: #a0aec0; /* Lighter gray for emphasis */
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+
+        /* Metric value and label styling */
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #e0e0e0;
+        }
+        .metric-label {
+            font-size: 0.875rem;
+            color: #a0aec0;
+        }
+
+        /* Toggle button styling */
+        .toggle-button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            border: 1px solid;
+            color: #e0e0e0;
+            background-color: #3a3a3a;
+            border-color: #4a4a4a;
+        }
+        .toggle-button.active {
+            background-color: #4299e1; /* Blue for active state */
+            border-color: #4299e1;
+            box-shadow: 0 2px 8px rgba(66, 153, 225, 0.3); /* Shadow for active state */
+        }
+
+        /* Taskbar (progress bar) item styling */
+        .taskbar-item {
+            margin-bottom: 0.75rem;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+        }
+        .taskbar-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.2rem;
+            color: #a0aec0;
+        }
+        .taskbar-value {
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+        .taskbar-container {
+            width: 100%;
+            background-color: #3a3a3a;
+            border-radius: 0.5rem;
+            height: 8px;
+            overflow: hidden;
+        }
+        .taskbar-fill {
+            height: 100%;
+            border-radius: 0.5rem;
+            transition: width 0.5s ease-out; /* Smooth fill animation */
+        }
+        /* Taskbar fill colors based on status */
+        .taskbar-safe-fill { background-color: #38a169; }
+        .taskbar-warning-fill { background-color: #f6ad55; }
+        .taskbar-fault-fill { background-color: #e53e3e; }
+        .taskbar-info-fill { background-color: #4299e1; }
+        .taskbar-optimal-fill { background-color: #2b6cb0; }
+        .taskbar-good-fill { background-color: #48bb78; }
+        .taskbar-moderate-fill { background-color: #ecc94b; }
+        .taskbar-critical-fill { background-color: #c53030; }
+
+        /* Environmental & Waste Statistics card styling */
+        .env-stats-card {
+            background-color: #2c2c2c;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            min-height: 250px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .progress-bar-container {
+            width: 100%;
+            background-color: #3a3a3a;
+            border-radius: 0.5rem;
+            height: 10px;
+            overflow: hidden;
+            margin-top: 0.25rem;
+        }
+        .progress-bar {
+            height: 100%;
+            border-radius: 0.5rem;
+            transition: width 0.5s ease-out;
+        }
+        /* Suggestion box styling */
+        .suggestion-box {
+            background-color: #3a3a3a;
+            border-left: 4px solid #4299e1; /* Blue accent bar */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+        .suggestion-box strong {
+            color: #a0aec0;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); /* Dark semi-transparent overlay */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000; /* Ensure it's on top */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out; /* Smooth fade in/out */
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: #2c2c2c;
+            border-radius: 1rem;
+            padding: 2rem;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh; /* Limit height to prevent overflow */
+            overflow-y: auto; /* Enable scrolling if content exceeds height */
+            color: #e0e0e0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            transform: scale(0.95); /* Slight scale animation on open */
+            transition: transform 0.3s ease-in-out;
+        }
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        .modal-header h2 {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+        .modal-close-button {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #a0aec0;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .modal-close-button:hover {
+            color: #e0e0e0;
+        }
+        .modal-section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #a0aec0;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px dashed #3a3a3a; /* Dashed line for sections */
+        }
+        .modal-metric-item {
+            background-color: #212121;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        .modal-metric-item .taskbar-label {
+            font-size: 0.95rem;
+            color: #e0e0e0;
+        }
+        .modal-metric-item .taskbar-value {
+            font-size: 1.1rem;
+        }
+        /* Chart container and individual chart item styling */
+        .chart-container-item {
+            background-color: #3a3a3a;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #a0aec0;
+            font-size: 1rem;
+            margin-top: 1rem;
+        }
+        .chart-container-item svg {
+            width: 100%;
+            height: 180px; /* Fixed height for charts */
+        }
+        .chart-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e0e0e0;
+            margin-bottom: 0.5rem;
+        }
+        /* D3.js chart specific styles */
+        .axis text {
+            fill: #a0aec0;
+            font-size: 0.7rem;
+        }
+        .axis line, .axis path {
+            stroke: #4a4a4a;
+        }
+        .line {
+            fill: none;
+            stroke: #4299e1; /* Blue line for trends */
+            stroke-width: 2px;
+        }
+        /* Loading spinner for charts */
+        .chart-loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #4299e1;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="dashboard-container">
+        <header>
+            <div class="flex items-center gap-4">
+                <h1 class="text-3xl font-bold">IoT Mozzarella</h1>
+                <span class="text-gray-400">|</span>
+                <span class="text-xl font-medium">Production Overview</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-gray-400">Switch View:</span>
+                <div class="flex gap-2">
+                    <button id="toggle-traditional" class="toggle-button">Traditional</button>
+                    <button id="toggle-iot" class="toggle-button active">IoT-Enabled</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-6">
+            <div class="col-span-full">
+                <h2 class="section-title mb-4">Detailed Equipment Monitoring</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="equipment-monitoring-grid">
+                    </div>
+            </div>
+
+            <div class="col-span-full">
+                <h2 class="section-title mt-6 mb-4">Environmental & Waste Statistics</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="env-waste-stats-grid">
+                    <div class="env-stats-card col-span-1 md:col-span-2 lg:col-span-2 xl:col-span-2">
+                        <div class="mb-4">
+                            <div class="flex justify-between items-center text-e0e0e0 mb-2">
+                                <span class="text-lg font-semibold">Water Reused</span>
+                                <span id="water-reused-value" class="text-xl font-bold"></span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div id="water-reused-bar" class="progress-bar"></div>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex justify-between items-center text-e0e0e0 mb-2">
+                                <span class="text-lg font-semibold">Energy Saved</span>
+                                <span id="energy-saved-value" class="text-xl font-bold"></span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div id="energy-saved-bar" class="progress-bar"></div>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex justify-between items-center text-e0e0e0 mb-2">
+                                <span class="text-lg font-semibold">Waste Volume</span>
+                                <span id="waste-volume-value" class="text-xl font-bold"></span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div id="waste-volume-bar" class="progress-bar"></div>
+                            </div>
+                        </div>
+                        <div id="suggestion-box" class="suggestion-box hidden">
+                            <strong>Suggestion:</strong> <span id="suggestion-text"></span>
+                        </div>
+                    </div>
+
+                    <div class="module-card">
+                        <h3 class="text-lg font-semibold text-white mb-2">Overall Plant Health</h3>
+                        <div class="flex items-center justify-between text-e0e0e0 text-sm">
+                            <span>System Score</span>
+                            <span id="plant-health-score" class="metric-value text-xl"></span>
+                        </div>
+                        <div class="flex items-center justify-between mt-1">
+                            <span id="plant-health-status" class="status-pill status-safe">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                                EXCELLENT
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="equipment-detail-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-equipment-title"></h2>
+                <button id="modal-close-button" class="modal-close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-overview-summary" class="text-gray-400 mb-4"></p>
+
+                <div id="modal-detail-metrics">
+                    <h3 class="modal-section-title">Current Sensor Readings</h3>
+                    </div>
+
+                <div id="modal-trend-charts">
+                    <h3 class="modal-section-title">Performance Trends (Last 24 Hours)</h3>
+                    <div id="chart-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="col-span-full flex justify-center items-center h-48">
+                            <div class="chart-loading-spinner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="modal-hse-waste-info">
+                    <h3 class="modal-section-title">HSE & Waste Impact</h3>
+                    <p id="modal-hse-text" class="mb-2 text-gray-300"></p>
+                    <p id="modal-waste-text" class="text-gray-300"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Helper function to create SVG icon for status pills
+        function getStatusIcon(indicator) {
+            if (indicator === '✓') {
+                return `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>`;
+            } else if (indicator === '!') {
+                return `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-12a1 1 0 102 0v4a1 1 0 10-2 0V6zm1 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path></svg>`;
+            } else if (indicator === 'X') {
+                return `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586l-1.293-1.293z" clip-rule="evenodd"></path></svg>`;
+            }
+            return '';
+        }
+
+        // Helper function to create a status pill HTML
+        function createStatusPill(status, statusType, indicator = '') {
+            const icon = getStatusIcon(indicator);
+            return `<span class="status-pill status-${statusType}">` + icon + status + `</span>`;
+        }
+
+        // Generate mock historical data for trends
+        function generateHistoricalData(currentValue, max, length = 24) {
+            const history = [];
+            let lastValue = currentValue;
+            for (let i = 0; i < length; i++) {
+                // Simulate very small fluctuations around the current value
+                const fluctuation = (Math.random() - 0.5) * (max * 0.005); // +/- 0.25% of max for very subtle changes
+                lastValue = Math.max(0, Math.min(max, lastValue + fluctuation)); // Ensure values stay within 0 and max
+                history.unshift({ time: new Date(Date.now() - (i * 3600 * 1000)), value: parseFloat(lastValue.toFixed(2)) });
+            }
+            return history;
+        }
+
+        // Data structure for the dashboard cards
+        const dashboardData = {
+            traditional: {
+                milk_reception: {
+                    title: "Milk Reception & Storage",
+                    overviewMetrics: [
+                        { label: "Temperature", value: "45.1 °F", status: "WARNING", statusType: "warning", indicator: "!" },
+                        { label: "Fill Level", value: "95%", status: "OVERFLOW", statusType: "fault", indicator: "X" }
+                    ],
+                    detailMetrics: [], // No detailed taskbars in traditional
+                    hseInfo: "Risk of bacterial growth due to infrequent temperature checks. Potential for overflow spills.",
+                    wasteInfo: "Milk spoilage from inconsistent temperature. Overflow waste during manual transfers."
+                },
+                pasteurization: {
+                    title: "Pasteurization Tanks",
+                    overviewMetrics: [
+                        { label: "Temperature", value: "115.3 °F", status: "WARNING", statusType: "warning", indicator: "!" },
+                        { label: "pH", value: "6.8", status: "LOW", statusType: "warning", indicator: "!" }
+                    ],
+                    detailMetrics: [],
+                    hseInfo: "Risk of steam burns/explosions. Incomplete pasteurization risking pathogen survival.",
+                    wasteInfo: "Product rework/rejection if pasteurization is inadequate. Energy waste."
+                },
+                culture_incubation: {
+                    title: "Culture Incubation",
+                    overviewMetrics: [
+                        { label: "Temperature", value: "105.0 °F", status: "STABLE", statusType: "safe", indicator: "✓" },
+                        { label: "Humidity", value: "N/A", status: "UNKNOWN", statusType: "info" }
+                    ],
+                    detailMetrics: [],
+                    hseInfo: "Manual monitoring prone to error. Risk of suboptimal culture growth.",
+                    wasteInfo: "Inconsistent product quality if culture is not optimal. Resource waste."
+                },
+                curd_cutting: {
+                    title: "Curd Cutting & Stirring",
+                    overviewMetrics: [
+                        { label: "Blade Sharpness", value: "Degraded", status: "INCONSISTENT", statusType: "warning", indicator: "!" },
+                        { label: "Motor Performance", value: "Manual", status: "N/A", statusType: "info" }
+                    ],
+                    detailMetrics: [],
+                    hseInfo: "Risk of injury during manual adjustments. Inconsistent curd quality affects food safety.",
+                    wasteInfo: "Higher product loss due to inconsistent curd. Energy waste from inefficient motors."
+                },
+                molding_shaping: {
+                    title: "Molding & Shaping",
+                    overviewMetrics: [
+                        { label: "Pressure", value: "130 psi", status: "VARYING", statusType: "warning", indicator: "!" },
+                        { label: "Form Quality", value: "Sub-par", status: "WARNING", statusType: "warning", indicator: "!" }
+                    ],
+                    detailMetrics: [],
+                    hseInfo: "Risk of machine malfunction due to lack of real-time data. Inconsistent product quality.",
+                    wasteInfo: "Increased product rejects due to poor shape/size. Material waste."
+                },
+                brining: {
+                    title: "Brining Tanks",
+                    overviewMetrics: [
+                        { label: "Salt Conc.", value: "11.2 %", status: "LOW", statusType: "warning", indicator: "!" },
+                        { label: "Brine Clarity", value: "Cloudy", status: "WASTE", statusType: "fault", indicator: "X" }
+                    ],
+                    detailMetrics: [],
+                    hseInfo: "Exposure to chemicals during manual brine management. Inconsistent product safety.",
+                    wasteInfo: "Excessive salt usage or inconsistent brining leads to waste. Brine disposal issues."
+                },
+                aging_storage: {
+                    title: "Aging & Storage Rooms",
+                    overviewMetrics: [
+                        { label: "Temperature", value: "N/A", status: "UNKNOWN", statusType: "info" },
+                        { label: "Humidity", value: "N/A", status: "UNKNOWN", statusType: "info" }
+                    ],
+                    detailMetrics: [],
+                    hseInfo: "Risk of product spoilage if environmental conditions are not ideal. Potential for mold growth.",
+                    wasteInfo: "High spoilage rates due to unmonitored conditions. Energy inefficiency."
+                },
+                packaging: {
+                    title: "Packaging Line",
+                    overviewMetrics: [
+                        { label: "Seal Integrity", value: "Variable", status: "WARNING", statusType: "warning", indicator: "!" },
+                        { label: "Speed", value: "Manual adjust", status: "N/A", statusType: "info" }
+                    ],
+                    detailMetrics: [],
+                    hseInfo: "Risk of product contamination from poor seals. Worker safety concerns with manual adjustments.",
+                    wasteInfo: "High reject rate due to poor sealing/labeling. Packaging material waste."
+                },
+            },
+            iot: {
+                milk_reception: {
+                    title: "Milk Reception & Storage",
+                    overviewMetrics: [
+                        { label: "Temperature", value: "38.4 °F", status: "OPTIMAL", statusType: "optimal", indicator: "✓" },
+                        { label: "Fill Level", value: "90%", status: "SAFE", statusType: "safe", indicator: "✓" }
+                    ],
+                    detailMetrics: [
+                        { id: "milkTemp", label: "Milk Temperature (°F)", value: 38.4, max: 40, status: "optimal", history: generateHistoricalData(38.4, 40) },
+                        { id: "fillLevel", label: "Fill Level (%)", value: 90, max: 100, status: "safe", history: generateHistoricalData(90, 100) },
+                        { id: "pumpVibration", label: "Pump Vibration (mm/s)", value: 8, max: 50, status: "safe", history: generateHistoricalData(8, 50) },
+                        { id: "filterClog", label: "Filter Clog Level (%)", value: 15, max: 100, status: "good", history: generateHistoricalData(15, 100) }
+                    ],
+                    hseInfo: "Continuous temperature/pH monitoring prevents bacterial growth. Automated level control minimizes spills and worker exposure. Early detection of contamination.",
+                    wasteInfo: "Minimized milk spoilage through precise climate control. Automated filling prevents overflow waste. Optimized inventory management based on real-time data."
+                },
+                pasteurization: {
+                    title: "Pasteurization Tanks",
+                    overviewMetrics: [
+                        { label: "Temperature", value: "108.7 °F", status: "OPTIMAL", statusType: "optimal", indicator: "✓" },
+                        { label: "pH", value: "6.2", status: "SAFE", statusType: "safe", indicator: "✓" }
+                    ],
+                    detailMetrics: [
+                        { id: "pasteurTemp", label: "Pasteurization Temp (°F)", value: 108.7, max: 110, status: "optimal", history: generateHistoricalData(108.7, 110) },
+                        { id: "flowRate", label: "Flow Rate Consistency (%)", value: 98, max: 100, status: "optimal", history: generateHistoricalData(98, 100) },
+                        { id: "pressureDiff", label: "Pressure Differential (psi)", value: 3, max: 10, status: "safe", history: generateHistoricalData(3, 10) },
+                        { id: "heatingEff", label: "Heating Element Efficiency (%)", value: 92, max: 100, status: "good", history: generateHistoricalData(92, 100) }
+                    ],
+                    hseInfo: "Predictive maintenance prevents failures. Precise, automated temperature control ensures pathogen elimination. Optimized energy consumption.",
+                    wasteInfo: "Reduced rework/rejection rates due to consistent process control. Significant energy savings from adaptive heating/cooling."
+                },
+                culture_incubation: {
+                    title: "Culture Incubation",
+                    overviewMetrics: [
+                        { label: "Temperature", value: "108.7 °F", status: "OPTIMAL", statusType: "optimal", indicator: "✓" },
+                        { label: "Humidity", value: "85%", status: "OPTIMAL", statusType: "optimal", indicator: "✓" }
+                    ],
+                    detailMetrics: [
+                        { id: "cultureTemp", label: "Culture Temp (°F)", value: 108.7, max: 110, status: "optimal", history: generateHistoricalData(108.7, 110) },
+                        { id: "co2", label: "Air Quality (CO2 ppm)", value: 450, max: 1000, status: "safe", history: generateHistoricalData(450, 1000) },
+                        { id: "fermentActivity", label: "Fermentation Activity (%)", value: 90, max: 100, status: "good", history: generateHistoricalData(90, 100) },
+                        { id: "nutrientLevel", label: "Nutrient Level (%)", value: 75, max: 100, status: "good", history: generateHistoricalData(75, 100) }
+                    ],
+                    hseInfo: "Automated environmental control ensures optimal culture growth, reducing contamination risk. Real-time alerts for deviations.",
+                    wasteInfo: "Consistent culture quality minimizes product loss. Optimized resource usage for incubation."
+                },
+                curd_cutting: {
+                    title: "Curd Cutting & Stirring",
+                    overviewMetrics: [
+                        { label: "Strand Uniformity", value: "Optimal", status: "OPTIMAL", statusType: "optimal", indicator: "✓" },
+                        { label: "Cutting Speed", value: "Auto", status: "SAFE", statusType: "safe", indicator: "✓" }
+                    ],
+                    detailMetrics: [
+                        { id: "bladeWear", label: "Blade Wear (%)", value: 10, max: 100, status: "good", history: generateHistoricalData(10, 100) },
+                        { id: "motorTorque", label: "Motor Torque (Nm)", value: 15, max: 20, status: "safe", history: generateHistoricalData(15, 20) },
+                        { id: "lubricantLevel", label: "Lubricant Level (%)", value: 85, max: 100, status: "optimal", history: generateHistoricalData(85, 100) },
+                        { id: "vibrationAnomaly", label: "Vibration Anomaly Score", value: 5, max: 100, status: "safe", history: generateHistoricalData(5, 100) }
+                    ],
+                    hseInfo: "Predictive maintenance for blades prevents failures and ensures consistent curd quality. Automated speed control reduces human error.",
+                    wasteInfo: "Optimized cutting reduces product loss. Efficient motor operation saves energy."
+                },
+                molding_shaping: {
+                    title: "Molding & Shaping",
+                    overviewMetrics: [
+                        { label: "Pressure", value: "140 psi", status: "OPTIMAL", statusType: "optimal", indicator: "✓" },
+                        { label: "Mold Integrity", value: "Optimal", status: "OPTIMAL", statusType: "optimal", indicator: "✓" }
+                    ],
+                    detailMetrics: [
+                        { id: "productUniformity", label: "Product Uniformity (%)", value: 97, max: 100, status: "optimal", history: generateHistoricalData(97, 100) },
+                        { id: "cycleTime", label: "Cycle Time (s)", value: 4.5, max: 6, status: "optimal", history: generateHistoricalData(4.5, 6) },
+                        { id: "heatingTemp", label: "Heating Plate Temp. (°F)", value: 160, max: 170, status: "good", history: generateHistoricalData(160, 170) },
+                        { id: "dieClogRisk", label: "Die Clog Risk (%)", value: 8, max: 100, status: "safe", history: generateHistoricalData(8, 100) }
+                    ],
+                    hseInfo: "Automated adjustments ensure consistent product quality, reducing food safety risks. Predictive maintenance prevents machine breakdowns.",
+                    wasteInfo: "Reduced product rejects due to precise molding. Optimized cycle times save energy and materials."
+                },
+                brining: {
+                    title: "Brining Tanks",
+                    overviewMetrics: [
+                        { label: "Salt Conc.", value: "14.5 %", status: "OPTIMAL", statusType: "optimal", indicator: "✓" },
+                        { label: "Temperature", value: "52°F", status: "OPTIMAL", statusType: "optimal", indicator: "✓" }
+                    ],
+                    detailMetrics: [
+                        { id: "brineDensity", label: "Brine Density (g/cm³)", value: 1.08, max: 1.1, status: "optimal", history: generateHistoricalData(1.08, 1.1) },
+                        { id: "purityIndex", label: "Purity Index (%)", value: 99, max: 100, status: "optimal", history: generateHistoricalData(99, 100) },
+                        { id: "filterBlockage", label: "Filter Blockage (%)", value: 5, max: 100, status: "safe", history: generateHistoricalData(5, 100) },
+                        { id: "fluidLevelHealth", label: "Fluid Level Sensor Health", value: 98, max: 100, status: "safe", history: generateHistoricalData(98, 100) }
+                    ],
+                    hseInfo: "Automated salt dosing and temperature control ensure product safety. Real-time monitoring prevents contamination.",
+                    wasteInfo: "Precise salt usage minimizes waste. Optimized brining reduces product loss and disposal costs."
+                },
+                aging_storage: {
+                    title: "Aging & Storage Rooms",
+                    overviewMetrics: [
+                        { label: "Temperature", value: "48°F", status: "OPTIMAL", statusType: "optimal", indicator: "✓" },
+                        { label: "Humidity", value: "88%", status: "OPTIMAL", statusType: "optimal", indicator: "✓" }
+                    ],
+                    detailMetrics: [
+                        { id: "airflowConsistency", label: "Airflow Consistency (%)", value: 95, max: 100, status: "optimal", history: generateHistoricalData(95, 100) },
+                        { id: "moldRisk", label: "Mold Growth Risk (%)", value: 2, max: 100, status: "safe", history: generateHistoricalData(2, 100) },
+                        { id: "oxygenLevel", label: "Oxygen Level (ppm)", value: 20.9, max: 21, status: "optimal", history: generateHistoricalData(20.9, 21) },
+                        { id: "lightExposure", label: "Light Exposure (Lux)", value: 10, max: 20, status: "safe", history: generateHistoricalData(10, 20) }
+                    ],
+                    hseInfo: "Precise environmental control prevents spoilage and ensures product safety. Early detection of anomalies.",
+                    wasteInfo: "Reduced spoilage rates. Optimized energy consumption for climate control."
+                },
+                packaging: {
+                    title: "Packaging Line",
+                    overviewMetrics: [
+                        { label: "Seal Integrity", value: "99.8%", status: "OPTIMAL", statusType: "optimal", indicator: "✓" },
+                        { label: "Speed", value: "Auto (120 units/min)", status: "SAFE", statusType: "safe", indicator: "✓" }
+                    ],
+                    detailMetrics: [
+                        { id: "filmTension", label: "Film Tension (N)", value: 25, max: 30, status: "optimal", history: generateHistoricalData(25, 30) },
+                        { id: "weightAccuracy", label: "Weight Accuracy (%)", value: 99.5, max: 100, status: "optimal", history: generateHistoricalData(99.5, 100) },
+                        { id: "labelAlignment", label: "Label Alignment (%)", value: 99, max: 100, status: "optimal", history: generateHistoricalData(99, 100) },
+                        { id: "rejectRate", label: "Reject Rate (%)", value: 0.1, max: 5, status: "safe", history: generateHistoricalData(0.1, 5) }
+                    ],
+                    hseInfo: "Automated defect detection prevents faulty products from reaching consumers. Reduced worker interaction with moving parts.",
+                    wasteInfo: "Minimized packaging material waste and product loss due to high accuracy. Optimized speed saves energy."
+                },
+            }
+        };
+
+        // Data for the comparative chart (Environmental & Waste)
+        const comparativeEnvData = {
+            traditional: {
+                waterReused: { value: 5, unit: "%", statusType: "fault", color: "#e53e3e" }, /* Updated to 5% */
+                energySaved: { value: 5, unit: "%", statusType: "warning", color: "#f6ad55" },
+                wasteVolume: { value: 18, unit: "% of production", statusType: "fault", color: "#e53e3e" } /* Updated to 18% */
+            },
+            iot: {
+                waterReused: { value: 68, unit: "%", statusType: "safe", color: "#38a169" },
+                energySaved: { value: 12, unit: "%", statusType: "safe", color: "#38a169" },
+                wasteVolume: { value: 2, unit: "% of production", statusType: "safe", color: "#38a169" } /* Assuming IoT reduces waste % significantly */
+            }
+        };
+
+
+        const equipmentGrid = document.getElementById('equipment-monitoring-grid');
+        const envStatsGrid = document.getElementById('env-waste-stats-grid');
+        const toggleTraditionalBtn = document.getElementById('toggle-traditional');
+        const toggleIoTBtn = document.getElementById('toggle-iot');
+
+        // Modal Elements
+        const equipmentDetailModal = document.getElementById('equipment-detail-modal');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        const modalEquipmentTitle = document.getElementById('modal-equipment-title');
+        const modalOverviewSummary = document.getElementById('modal-overview-summary');
+        const modalDetailMetrics = document.getElementById('modal-detail-metrics');
+        const modalHSEText = document.getElementById('modal-hse-text');
+        const modalWasteText = document.getElementById('modal-waste-text');
+        const chartContainer = document.getElementById('chart-container');
+
+
+        let currentScenario = 'iot'; // Default to IoT-Enabled for initial view
+
+        // Function to render the dashboard
+        function renderDashboard() {
+            const scenarioData = dashboardData[currentScenario];
+            equipmentGrid.innerHTML = ''; // Clear previous cards
+
+            // Render Equipment Monitoring cards
+            for (const key in scenarioData) {
+                // Ensure we only render equipment cards here, not env_stats
+                if (key === 'env_stats') continue;
+
+                const module = scenarioData[key];
+
+                let overviewMetricsHtml = '';
+                module.overviewMetrics.forEach(metric => {
+                    overviewMetricsHtml += `
+                        <div class="flex items-center justify-between text-e0e0e0 text-sm mb-1">
+                            <span class="metric-label">${metric.label}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="metric-value text-base">${metric.value}</span>
+                                ${createStatusPill(metric.status, metric.statusType, metric.indicator)}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                let detailMetricsHtml = '';
+                if (currentScenario === 'iot' && module.detailMetrics && module.detailMetrics.length > 0) {
+                    module.detailMetrics.forEach(detail => {
+                        const barValue = (detail.value / detail.max) * 100;
+                        detailMetricsHtml += `
+                            <div class="taskbar-item">
+                                <div class="taskbar-label">
+                                    <span>${detail.label}</span>
+                                    <span class="taskbar-value">${detail.value}${detail.unit ? detail.unit : ''}</span>
+                                </div>
+                                <div class="taskbar-container">
+                                    <div class="taskbar-fill taskbar-${detail.status}-fill" style="width: ${barValue}%;"></div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    detailMetricsHtml = `<div class="mt-4 pt-4 border-t border-gray-700">${detailMetricsHtml}</div>`;
+                }
+
+                const cardHtml = `
+                    <div class="module-card" data-equipment-key="${key}">
+                        <h3 class="text-lg font-semibold text-white mb-4">${module.title}</h3>
+                        ${overviewMetricsHtml}
+                        ${detailMetricsHtml}
+                    </div>
+                `;
+                equipmentGrid.innerHTML += cardHtml;
+            }
+
+            // Add click listeners to cards
+            document.querySelectorAll('.module-card').forEach(card => {
+                card.addEventListener('click', (event) => {
+                    const equipmentKey = event.currentTarget.dataset.equipmentKey;
+                    openEquipmentDetailModal(equipmentKey);
+                });
+            });
+
+
+            // Update Environmental & Waste Statistics (using comparativeEnvData now)
+            const currentEnvStats = comparativeEnvData[currentScenario];
+
+            document.getElementById('water-reused-value').textContent = `${currentEnvStats.waterReused.value}${currentEnvStats.waterReused.unit}`;
+            document.getElementById('water-reused-bar').style.width = `${currentEnvStats.waterReused.value}%`;
+            document.getElementById('water-reused-bar').style.backgroundColor = currentEnvStats.waterReused.color;
+
+            document.getElementById('energy-saved-value').textContent = `${currentEnvStats.energySaved.value}${currentEnvStats.energySaved.unit}`;
+            document.getElementById('energy-saved-bar').style.width = `${currentEnvStats.energySaved.value}%`;
+            document.getElementById('energy-saved-bar').style.backgroundColor = currentEnvStats.energySaved.color;
+
+            document.getElementById('waste-volume-value').textContent = `${currentEnvStats.wasteVolume.value}${currentEnvStats.wasteVolume.unit}`;
+            // For waste volume, the bar represents the *reduction* or *efficiency*.
+            // Let's assume the value is the percentage of production that IS waste.
+            // So, a higher value means more waste, and the bar should reflect how 'bad' it is, or how 'good' the efficiency is.
+            // If the value is 18% waste, then 82% is efficient. If 2% waste, 98% efficient.
+            const wasteEfficiency = 100 - currentEnvStats.wasteVolume.value;
+            document.getElementById('waste-volume-bar').style.width = `${wasteEfficiency}%`;
+            // Color the waste bar based on its status type (e.g., red for fault, green for safe)
+            document.getElementById('waste-volume-bar').style.backgroundColor = currentEnvStats.wasteVolume.color;
+
+
+            const suggestionBox = document.getElementById('suggestion-box');
+            const suggestionText = document.getElementById('suggestion-text');
+            // The suggestion box is now tied to the IoT scenario's specific suggestion
+            const iotEnvStats = dashboardData.iot.env_stats; // Use IoT's suggestion data
+            if (iotEnvStats.suggestion && !iotEnvStats.suggestion.hidden) {
+                suggestionBox.classList.remove('hidden');
+                suggestionText.textContent = iotEnvStats.suggestion.text;
+            } else {
+                suggestionBox.classList.add('hidden');
+            }
+
+            // Overall Plant Health is static for now, as it's not in comparativeEnvData
+            document.getElementById('plant-health-score').textContent = '92%';
+            document.getElementById('plant-health-status').className = `status-pill status-safe`;
+            document.getElementById('plant-health-status').innerHTML = createStatusPill('EXCELLENT', 'safe', '✓').replace(/<span.*?>|<\/span>/g, '');
+
+
+            // Update toggle button active states
+            toggleTraditionalBtn.classList.remove('active');
+            toggleIoTBtn.classList.remove('active');
+            if (currentScenario === 'traditional') {
+                toggleTraditionalBtn.classList.add('active');
+            } else {
+                toggleIoTBtn.classList.add('active');
+            }
+
+            // Render the comparative chart if it's still desired (removed from this version to focus on equipment)
+            // If you want to re-add it, uncomment the call here and ensure its data is set up correctly.
+            // renderComparativeChart();
+        }
+
+        // Function to open the equipment detail modal
+        function openEquipmentDetailModal(equipmentKey) {
+            const moduleData = dashboardData[currentScenario][equipmentKey];
+
+            modalEquipmentTitle.textContent = moduleData.title;
+            modalOverviewSummary.textContent = `Current status: ${moduleData.overviewMetrics.map(m => `${m.label}: ${m.value} (${m.status})`).join(', ')}.`;
+
+            // Populate current sensor readings
+            modalDetailMetrics.innerHTML = '<h3 class="modal-section-title">Current Sensor Readings</h3>';
+            if (currentScenario === 'iot' && moduleData.detailMetrics && moduleData.detailMetrics.length > 0) {
+                moduleData.detailMetrics.forEach(detail => {
+                    const barValue = (detail.value / detail.max) * 100;
+                    modalDetailMetrics.innerHTML += `
+                        <div class="modal-metric-item">
+                            <div class="taskbar-label">
+                                <span>${detail.label}</span>
+                                <span class="taskbar-value">${detail.value}${detail.unit ? detail.unit : ''}</span>
+                            </div>
+                            <div class="taskbar-container">
+                                <div class="taskbar-fill taskbar-${detail.status}-fill" style="width: ${barValue}%;"></div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                modalDetailMetrics.innerHTML += `<p class="text-gray-400">No detailed sensor data available for this view.</p>`;
+            }
+
+            // Populate HSE & Waste Info
+            modalHSEText.textContent = `HSE Impact: ${moduleData.hseInfo || 'No specific info available.'}`;
+            modalWasteText.textContent = `Waste Impact: ${moduleData.wasteInfo || 'No specific info available.'}`;
+
+            // Show loading spinner while charts are being rendered
+            chartContainer.innerHTML = `
+                <div class="col-span-full flex justify-center items-center h-48">
+                    <div class="chart-loading-spinner"></div>
+                </div>
+            `;
+
+            // Render charts if in IoT mode and data is available after a short delay to show spinner
+            setTimeout(() => {
+                if (currentScenario === 'iot' && moduleData.detailMetrics) {
+                    renderChartsInModal(moduleData.detailMetrics);
+                } else {
+                    chartContainer.innerHTML = `<p class="text-gray-400 text-center mt-8">Trend charts are available in IoT-Enabled mode.</p>`;
+                }
+            }, 500); // Simulate a small loading delay
+
+            // Show the modal
+            equipmentDetailModal.classList.add('active');
+        }
+
+        // Function to close the equipment detail modal
+        function closeEquipmentDetailModal() {
+            equipmentDetailModal.classList.remove('active');
+        }
+
+        // D3.js Chart Rendering Function for Modal
+        function renderChartsInModal(detailMetrics) {
+            chartContainer.innerHTML = ''; // Clear previous charts after loading
+
+            const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+
+            detailMetrics.forEach(metric => {
+                if (metric.history && metric.history.length > 0) {
+                    const chartDiv = d3.select(chartContainer).append("div")
+                        .attr("class", "chart-container-item");
+
+                    chartDiv.append("div")
+                        .attr("class", "chart-title")
+                        .text(`${metric.label} Trend`);
+
+                    const svg = chartDiv.append("svg");
+
+                    // Get current dimensions of the chart container dynamically
+                    const containerRect = chartDiv.node().getBoundingClientRect();
+                    const svgWidth = containerRect.width;
+                    const svgHeight = 220; // Fixed height for the SVG itself, consistent with CSS
+
+                    // Set explicit SVG dimensions
+                    svg.attr("width", svgWidth)
+                       .attr("height", svgHeight);
+
+                    const chartWidth = svgWidth - margin.left - margin.right;
+                    const chartHeight = svgHeight - margin.top - margin.bottom;
+
+                    const g = svg.append("g")
+                        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+                    const x = d3.scaleTime()
+                        .domain(d3.extent(metric.history, d => d.time))
+                        .range([0, chartWidth]);
+
+                    // Dynamic Y domain based on actual data, with some padding
+                    const minVal = d3.min(metric.history, d => d.value);
+                    const maxVal = d3.max(metric.history, d => d.value);
+                    const range = maxVal - minVal;
+                    const padding = range * 0.1 || (metric.max * 0.02); // 10% of range, or 2% of max if range is tiny
+
+                    const y = d3.scaleLinear()
+                        .domain([Math.max(0, minVal - padding), maxVal + padding]) // Ensure non-negative lower bound
+                        .range([chartHeight, 0]);
+
+                    const line = d3.line()
+                        .x(d => x(d.time))
+                        .y(d => y(d.value));
+
+                    // Add X axis
+                    g.append("g")
+                        .attr("class", "x axis")
+                        .attr("transform", `translate(0,${chartHeight})`)
+                        .call(d3.axisBottom(x).ticks(d3.timeHour.every(6)).tickFormat(d3.timeFormat("%H:%M"))); // Ticks every 6 hours
+
+                    // Add Y axis
+                    g.append("g")
+                        .attr("class", "y axis")
+                        .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d}${metric.unit ? metric.unit : ''}`)); // Add unit to Y-axis ticks
+
+                    // Add the line path
+                    g.append("path")
+                        .datum(metric.history)
+                        .attr("class", "line")
+                        .attr("d", line);
+
+                    // Add tooltip functionality (simple circle and text on hover)
+                    const focus = g.append("g")
+                        .attr("class", "focus")
+                        .style("display", "none");
+
+                    focus.append("circle")
+                        .attr("r", 4.5)
+                        .attr("fill", "#e0e0e0");
+
+                    focus.append("text")
+                        .attr("x", 9)
+                        .attr("dy", ".35em")
+                        .attr("fill", "#e0e0e0");
+
+                    svg.append("rect")
+                        .attr("class", "overlay")
+                        .attr("width", chartWidth)
+                        .attr("height", chartHeight)
+                        .style("fill", "none")
+                        .style("pointer-events", "all")
+                        .attr("transform", `translate(${margin.left},${margin.top})`)
+                        .on("mouseover", () => focus.style("display", null))
+                        .on("mouseout", () => focus.style("display", "none"))
+                        .on("mousemove", mousemove);
+
+                    function mousemove(event) {
+                        const bisectDate = d3.bisector(d => d.time).left;
+                        const x0 = x.invert(d3.pointer(event)[0]);
+                        const i = bisectDate(metric.history, x0, 1);
+                        const d0 = metric.history[i - 1];
+                        const d1 = metric.history[i];
+                        const d = x0 - d0.time > d1.time - x0 ? d1 : d0;
+
+                        focus.attr("transform", `translate(${x(d.time)},${y(d.value)})`);
+                        focus.select("text").text(`${d.value}${metric.unit ? metric.unit : ''}`);
+                    }
+                }
+            });
+        }
+
+
+        // Event Listeners for Scenario Toggle Buttons
+        toggleTraditionalBtn.addEventListener('click', () => {
+            currentScenario = 'traditional';
+            renderDashboard();
+        });
+
+        toggleIoTBtn.addEventListener('click', () => {
+            currentScenario = 'iot';
+            renderDashboard();
+        });
+
+        // Event listener for modal close button
+        modalCloseButton.addEventListener('click', closeEquipmentDetailModal);
+
+        // Close modal if clicked outside
+        equipmentDetailModal.addEventListener('click', (event) => {
+            if (event.target === equipmentDetailModal) {
+                closeEquipmentDetailModal();
+            }
+        });
+
+        // Initial render on page load
+        document.addEventListener('DOMContentLoaded', renderDashboard);
+    </script>
+</body>
+</html>
